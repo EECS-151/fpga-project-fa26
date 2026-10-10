@@ -1,1 +1,1 @@
-# fpga_project_sp26
+# fpga-project-fa26
