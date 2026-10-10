@@ -1,0 +1,11 @@
+*.bin
+*.dump
+*.log
+*.hex
+*.elf
+
+## RTOS
+rtos/venv
+rtos/build
+rtos/zephyr
+rtos/modules

@@ -1,0 +1,15 @@
+build
+*.fst
+*.tbi
+csrc
+ucli.key
+*.vpd
+*.fsdb
+*.tb
+*.tb.daidir
+*.wav
+*.txt
+*.log
+DVEfiles
+.idea
+test_results
