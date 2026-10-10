@@ -99,14 +99,13 @@ module m_extension_tb;
   logic [14:0] INST_ADDR;
 
   initial begin
-    `ifdef IVERILOG
-        $dumpfile("m_extension_tb.fst");
-        $dumpvars(0, m_extension_tb);
-    `endif
-    `ifndef IVERILOG
-        $vcdpluson;
-        $vcdplusmemon;
-    `endif
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, m_extension_tb);
+
     rst = 1'b0;
     rst = 1'b1;
     repeat (10) @(posedge clk);

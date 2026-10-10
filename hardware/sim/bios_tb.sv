@@ -113,15 +113,14 @@ module bios_tb();
   end
 
   initial begin
-    $readmemh("../../software/bios/bios.hex", `BIOS_PATH.mem, 0, 4095);
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, bios_tb);
 
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("bios_tb.fst");
-        $dumpvars(0, bios_tb);
-    `endif
+    $readmemh("../../software/bios/bios.hex", `BIOS_PATH.mem, 0, 4095);
 
     rst = 1;
     serial_in = 1;

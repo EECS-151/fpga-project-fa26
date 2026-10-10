@@ -46,15 +46,15 @@ module asm_tb();
   endtask
 
   initial begin
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, asm_tb);
+
     $readmemh("../../software/asm/asm.hex", `BIOS_PATH.mem, 0, 4095);
 
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("asm_tb.fst");
-        $dumpvars(0, asm_tb);
-    `endif
     rst = 0;
 
     // Reset the CPU

@@ -82,17 +82,16 @@ module zephyr_tb;
   end
 
   initial begin
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, zephyr_tb);
+
     $readmemh("../../software/bios/bios.hex", `BIOS_PATH.mem, 0, 16384);
     $readmemh("../../software/rtos/build/zephyr/zephyr.hex", `IMEM_PATH.mem, 0, 65535);
     $readmemh("../../software/rtos/build/zephyr/zephyr.hex", `DMEM_PATH.mem, 0, 65535);
-
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("zephyr_tb.fst");
-        $dumpvars(0, zephyr_tb);
-    `endif
 
     rst = 1'b1;
     serial_in = 1'b1;

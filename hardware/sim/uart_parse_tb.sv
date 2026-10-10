@@ -95,16 +95,15 @@ module uart_parse_tb();
   endtask
 
   initial begin
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, uart_parse_tb);
+
     $readmemh("../../software/uart_parse/uart_parse.hex", `IMEM_PATH.mem, 0, 16384-1);
     $readmemh("../../software/uart_parse/uart_parse.hex", `DMEM_PATH.mem, 0, 16384-1);
-
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("uart_parse_tb.fst");
-        $dumpvars(0, uart_parse_tb);
-    `endif
 
     rst = 1;
     serial_in = 1;

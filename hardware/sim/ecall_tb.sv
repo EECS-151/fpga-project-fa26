@@ -52,13 +52,12 @@ module ecall_tb;
   logic [14:0] INST_ADDR;
 
   initial begin
-    `ifndef IVERILOG
-      $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-      $dumpfile("ecall_tb.fst");
-      $dumpvars(0, ecall_tb);
-    `endif
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, ecall_tb);
 
     #0;
     rst = 0;

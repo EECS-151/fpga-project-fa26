@@ -54,13 +54,12 @@ module timer_interrupt_tb;
   logic [14:0] INST_ADDR;
 
   initial begin
-    `ifndef IVERILOG
-      $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-      $dumpfile("timer_interrupt_tb.fst");
-      $dumpvars(0, timer_interrupt_tb);
-    `endif
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, timer_interrupt_tb);
 
     #0;
     rst = 1'b0;

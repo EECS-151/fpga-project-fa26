@@ -87,15 +87,11 @@ def c_test_success_cond(_: str) -> bool:
     return True
 
 
-def silent_remove_factory(testbench: str, simulator: str) -> Callable[[], None]:
+def silent_remove_factory(testbench: str) -> Callable[[], None]:
     def foo():
         try:
-            if simulator == "vcs":
-                remove(f"sim/{testbench}.tb")
-                remove(f"sim/{testbench}.vpd")
-            else:
-                remove(f"sim/{testbench}.tbi")
-                remove(f"sim/{testbench}.fst")
+            remove(f"sim/{testbench}.tb")
+            remove(f"sim/{testbench}.fsdb")
             remove(f"sim/{testbench}.log")
         except OSError:
             pass
@@ -106,40 +102,38 @@ def silent_remove_factory(testbench: str, simulator: str) -> Callable[[], None]:
 def main():
     makedirs(RESULT_DIR, exist_ok=True)
     parser = argparse.ArgumentParser(description="Run all RTL simulations and perform checks")
-    parser.add_argument("--simulator", type=str, choices=["vcs", "iverilog"], default="vcs", help="The RTL simulator to use")
     parser.add_argument("-c", "--continue-on-error", action="store_true", help="Controls whether the script dies on error")
     args = parser.parse_args()
-    waveform_suffix = "vpd" if args.simulator == "vcs" else "fst"
     error = False
     error = not run_bench(
-        f"sim/cpu_tb.{waveform_suffix}",
-        silent_remove_factory("cpu_tb", args.simulator),
+        "sim/cpu_tb.fsdb",
+        silent_remove_factory("cpu_tb"),
         lambda stdout: "All tests passed!" in stdout,
         args.continue_on_error
     ) or error
     error = not run_bench(
-        f"sim/asm_tb.{waveform_suffix}",
-        silent_remove_factory("asm_tb", args.simulator),
+        "sim/asm_tb.fsdb",
+        silent_remove_factory("asm_tb"),
         lambda stdout: "ALL ASSEMBLY TESTS PASSED!" in stdout,
         args.continue_on_error
     ) or error
     error = not run_bench("isa-tests", cleanup_isa_tests, isa_test_success_cond, args.continue_on_error) or error
     error = not run_bench("c-tests", cleanup_c_tests, c_test_success_cond, args.continue_on_error) or error
     error = not run_bench(
-        f"sim/echo_tb.{waveform_suffix}",
-        silent_remove_factory("echo_tb", args.simulator),
+        "sim/echo_tb.fsdb",
+        silent_remove_factory("echo_tb"),
         lambda stdout: "Test passed!" in stdout,
         args.continue_on_error
     ) or error
     error = not run_bench(
-        f"sim/uart_parse_tb.{waveform_suffix}",
-        silent_remove_factory("uart_parse_tb", args.simulator),
+        "sim/uart_parse_tb.fsdb",
+        silent_remove_factory("uart_parse_tb"),
         lambda stdout: "CSR test PASSED! Strings matched." in stdout,
         args.continue_on_error
     ) or error
     error = not run_bench(
-        f"sim/bios_tb.{waveform_suffix}",
-        silent_remove_factory("bios_tb", args.simulator),
+        "sim/bios_tb.fsdb",
+        silent_remove_factory("bios_tb"),
         lambda stdout: "BIOS testbench done! Num failed tests:          0" in stdout,
         args.continue_on_error
     ) or error

@@ -103,16 +103,16 @@ module echo_tb();
   endtask
 
   initial begin
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, echo_tb);
+
     $readmemh("../../software/echo/echo.hex", `IMEM_PATH.mem, 0, 16384-1);
     $readmemh("../../software/echo/echo.hex", `DMEM_PATH.mem, 0, 16384-1);
 
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("echo_tb.fst");
-        $dumpvars(0, echo_tb);
-    `endif
     rst = 1;
     serial_in = 1;
 

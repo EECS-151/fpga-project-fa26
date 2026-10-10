@@ -178,13 +178,12 @@ module cpu_tb;
   string       BR_NAME_NTK   [6];
 
   initial begin
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("cpu_tb.fst");
-        $dumpvars(0, cpu_tb);
-    `endif
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, cpu_tb);
 
     rst = 1'b0;
 

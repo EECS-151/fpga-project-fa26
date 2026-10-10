@@ -69,18 +69,16 @@ module bdd_small_tb();
   reg [255:0] MIF_FILE;
   string output_string;
   initial begin
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, bdd_small_tb);
 
     $readmemh("../../software/bios/bios.hex", `BIOS_PATH.mem, 0, 4095);
     $readmemh("../../software/small/bdd/bdd.hex", `IMEM_PATH.mem, 0, 16384-1);
     $readmemh("../../software/small/bdd/bdd.hex", `DMEM_PATH.mem, 0, 16384-1);
-
-    `ifndef IVERILOG
-      $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-      $dumpfile("bdd_small.fst");
-      $dumpvars(0, c_tests_tb);
-    `endif
 
     rst = 1;
 

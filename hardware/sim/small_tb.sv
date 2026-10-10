@@ -66,6 +66,13 @@ module small_tb();
   string hex_file, test_name;
   reg [8*8-1:0] expected;
   initial begin
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, small_tb);
+
     if (!$value$plusargs("hex_file=%s", hex_file)) begin
       $display("Must supply hex_file!");
       $fatal();
@@ -75,14 +82,6 @@ module small_tb();
       $display("Must supply test_name!");
       $fatal();
     end
-
-    `ifndef IVERILOG
-      $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-      $dumpfile({test_name, ".fst"});
-      $dumpvars(0, small_tb);
-    `endif
 
     #1;
     $readmemh(hex_file, `IMEM_PATH.mem, 0, 16384-1);

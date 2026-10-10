@@ -41,6 +41,13 @@ module c_tests_tb();
   reg [255:0] MIF_FILE;
   string hex_file, test_name;
   initial begin
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, c_tests_tb);
+
     if (!$value$plusargs("hex_file=%s", hex_file)) begin
       $display("Must supply hex_file!");
       $fatal();
@@ -53,14 +60,6 @@ module c_tests_tb();
 
     $readmemh(hex_file, `IMEM_PATH.mem, 0, 16384-1);
     $readmemh(hex_file, `DMEM_PATH.mem, 0, 16384-1);
-
-    `ifndef IVERILOG
-      $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-      $dumpfile({test_name, ".fst"});
-      $dumpvars(0, c_tests_tb);
-    `endif
 
     rst = 1;
 

@@ -3,33 +3,22 @@
 ## Simulation
 
 ### Regular Testbenches
-
-#### iverilog
 ```bash
-make sim/cpu_tb.fst
+make sim/cpu_tb.fsdb
 # logfile
 cat sim/cpu_tb.log
 # waveform
-gtkwave sim/cpu_tb.fst &
-```
-
-#### VCS
-```bash
-make sim/cpu_tb.vpd
-# logfile
-cat sim/cpu_tb.log
-# waveform
-dve -vpd sim/cpu_tb.vpd &
+make verdi TB=cpu_tb
 ```
 
 ### ISA Tests
 ```bash
 make isa-tests
-gtkwave sim/isa/rv32ui-p-add.fst &
+verdi -dbdir sim/isa/isa_tb.tb.daidir -ssf sim/isa/rv32ui-p-add.fsdb &
 ```
 
 - Clean simulation outputs: `make clean-sim`
-- Forcefully re-run a testbench: `make -B sim/cpu_tb.fst`
+- Forcefully re-run a testbench: `make -B sim/cpu_tb.fsdb`
 
 ## CAD Flow
 - Lint RTL with verilator: `make lint`

@@ -109,14 +109,12 @@ module csr_counter_tb();
   endtask
 
   initial begin
-    `ifndef IVERILOG
-        $vcdpluson;
-        $vcdplusmemon;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("csr_verification_tb.fst");
-        $dumpvars(0, csr_counter_tb);
-    `endif
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, csr_counter_tb);
 
     while (all_tests_passed === 0) begin
       @(posedge clk);

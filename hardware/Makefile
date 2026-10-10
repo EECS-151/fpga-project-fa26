@@ -5,10 +5,7 @@ VIVADO                  ?= vivado
 VIVADO_OPTS             ?= -nolog -nojournal -mode batch
 FPGA_PART               ?= xczu3eg-sfvc784-2-e
 RTL                     += $(subst /cygdrive/c/,C:/,$(shell find $(ABS_TOP)/src -type f -name "*.sv"))
-# The Ethernet shell (src/eth) and the vendored verilog-ethernet library it builds on: plain Verilog
 ETH_RTL                 := $(subst /cygdrive/c/,C:/,$(shell find $(ABS_TOP)/src/eth $(ABS_TOP)/third_party/verilog-ethernet/rtl $(ABS_TOP)/third_party/verilog-ethernet/lib/axis/rtl -type f -name "*.v"))
-# The FPGA build reads the Ethernet interface from src/eth/eth_seal_bundle.vp; simulation uses its
-# model in sim_models/ (see ETH_SIM_MODEL below).
 SEAL_VP                 := $(ABS_TOP)/src/eth/eth_seal_bundle.vp
 SEALED                  ?= $(if $(wildcard $(SEAL_VP)),1,0)
 ifeq ($(SEALED),1)
@@ -34,7 +31,6 @@ else
 SIM_SRC                 := $(RTL) $(ETH_RTL)
 SIM_MODELS_USED         := $(filter-out %/eth_seal_sim.sv,$(SIM_MODELS))
 endif
-# TODO (checkpoint 3) - Add to SIM_MODELS here
 
 # Xilinx simulation libraries (unisims and XPM) from the Vivado install
 XILINX_VIVADO           ?= /share/instsww/xilinx/2025.2/Vivado

@@ -168,13 +168,12 @@ module bios_imem_tb();
   reg [255:0] BR_NAME_NTK   [5:0];
 
   initial begin
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("cpu_tb.fst");
-        $dumpvars(0, cpu_tb);
-    `endif
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, bios_imem_tb);
 
     #0;
     rst = 0;

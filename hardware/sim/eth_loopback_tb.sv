@@ -94,17 +94,16 @@ module eth_loopback_tb();
 
   initial begin
     logic [7:0] r [$];
+    string fsdb_file;
+    if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
+      fsdb_file = "default.fsdb";
+    end
+    $fsdbDumpfile(fsdb_file);
+    $fsdbDumpvars(0, eth_loopback_tb);
 
     $readmemh("../../software/eth_loopback/eth_loopback.hex", `IMEM_PATH.mem, 0, 16384-1);
     $readmemh("../../software/eth_loopback/eth_loopback.hex", `DMEM_PATH.mem, 0, 16384-1);
 
-    `ifndef IVERILOG
-        $vcdpluson;
-    `endif
-    `ifdef IVERILOG
-        $dumpfile("eth_loopback_tb.fst");
-        $dumpvars(0, eth_loopback_tb);
-    `endif
     rst = 1;
     repeat (20) @(posedge clk);
     @(negedge clk); rst = 0;
