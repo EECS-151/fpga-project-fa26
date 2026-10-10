@@ -1,3 +1,4 @@
+`default_nettype none
 module zu3top #(
     parameter int BAUD_RATE = 115_200,
     // Warning: CPU_CLOCK_FREQ must match the PLL parameters!
