@@ -30,6 +30,8 @@ verdi -dbdir sim/isa/isa_tb.tb.daidir -ssf sim/isa/rv32ui-p-add.fsdb &
     - Log file: `build/impl/impl.log`
 - Program FPGA: `make program`
 - Force program FPGA (don't rebuild bitstream if RTL changed): `make program-force`
+- Give your FPGA board back: `make release`
+- Show the board you currently hold: `make board-status`
 - Clean CAD flow outputs: `make clean-build`
 
 ## Runtime
