@@ -2,11 +2,11 @@ module dmem (
   input wire logic clk,
   input wire logic en,
   input wire logic [3:0] we,
-  input wire logic [14:0] addr,
+  input wire logic [13:0] addr,
   input wire logic [31:0] din,
   output logic [31:0] dout
 );
-  parameter DEPTH = 32768;
+  parameter DEPTH = 16384;
 
   // See page 133 of the Vivado Synthesis Guide for the template
   // https://www.xilinx.com/support/documentation/sw_manuals/xilinx2016_4/ug901-vivado-synthesis.pdf
