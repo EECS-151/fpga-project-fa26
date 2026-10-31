@@ -18,8 +18,6 @@ module zephyr_tb;
   initial system_clk = '0;
   always #(5) system_clk = ~system_clk;
 
-  logic bp_enable = 1'b0;
-
   logic serial_in;
   logic serial_out;
 
@@ -33,7 +31,6 @@ module zephyr_tb;
     .clk(clk),
     .system_clk(system_clk),
     .rst(rst),
-    .bp_enable(bp_enable),
     .serial_in(serial_in),   // input
     .serial_out(serial_out),  // output
     .errors()

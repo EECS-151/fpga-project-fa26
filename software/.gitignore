@@ -3,6 +3,8 @@
 *.log
 *.hex
 *.elf
+# the provided trading programs
+!trading/*.hex
 
 ## RTOS
 rtos/venv

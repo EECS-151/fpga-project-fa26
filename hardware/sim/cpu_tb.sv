@@ -34,7 +34,6 @@ module cpu_tb;
 
   logic clk;
   logic rst;
-  logic bp_enable = 1'b0;
 
   initial clk = 0;
   always #(CPU_CLOCK_PERIOD / 2) clk = ~clk;

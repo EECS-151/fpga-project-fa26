@@ -17,7 +17,7 @@ if {[string trim ${CONSTRAINTS}] ne ""} {
 
 auto_detect_xpm
 
-synth_design -verilog_define SYNTHESIS -verilog_define ABS_TOP=${ABS_TOP} -top ${TOP} -part ${FPGA_PART} -include_dirs ${ABS_TOP}/src/riscv_core
+synth_design -verilog_define SYNTHESIS -verilog_define ABS_TOP=${ABS_TOP} -generic HAS_ACCEL=${HAS_ACCEL} -top ${TOP} -part ${FPGA_PART} -include_dirs ${ABS_TOP}/src/riscv_core
 
 write_checkpoint -force ${TOP}.dcp
 report_timing_summary -file post_synth_timing_summary.rpt

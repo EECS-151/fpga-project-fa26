@@ -16,8 +16,6 @@ module m_extension_tb;
   initial clk = '0;
   always #(CPU_CLOCK_PERIOD/2) clk = ~clk;
 
-  logic bp_enable = 1'b0;
-
   // Use IMEM space (pc[30]==0) so tests loaded at INST_ADDR run from IMem like isa_tb
   cpu # (
     .CPU_CLOCK_FREQ(CPU_CLOCK_FREQ),
@@ -26,7 +24,6 @@ module m_extension_tb;
     .clk(clk),
     .system_clk(clk),
     .rst(rst),
-    .bp_enable(bp_enable),
     .serial_in(1'b1),
     .serial_out(),
     .errors()

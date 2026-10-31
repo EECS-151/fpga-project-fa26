@@ -7,7 +7,6 @@ module cpu #(
     input wire logic clk,
     input wire logic rst,
     input wire logic system_clk,
-    input wire logic bp_enable,
     input wire logic serial_in,
     output logic serial_out,
 
@@ -21,6 +20,13 @@ module cpu #(
     input wire logic eth_tx_ready,
     output logic eth_tx_end,          // one-cycle pulse: the response frame is complete
     input wire logic eth_link_up,
+
+    // Accelerator interface, mapped to 0x8001_0000 - 0x8001_03FF
+    output logic [9:0] accel_addr,    // byte offset in the window
+    output logic [31:0] accel_wdata,
+    output logic accel_we,
+    output logic accel_re,
+    input wire logic [31:0] accel_rdata,
     output logic [2:0] errors
 );
     // BIOS Memory
@@ -43,7 +49,7 @@ module cpu #(
     // Synchronous read: read takes one cycle
     // Synchronous write: write takes one cycle
     // Write-byte-enable: select which of the four bytes to write
-    logic [13:0] dmem_addr;
+    logic [14:0] dmem_addr;
     logic [31:0] dmem_din, dmem_dout;
     logic [3:0] dmem_we;
     logic dmem_en;
@@ -61,7 +67,7 @@ module cpu #(
     // Synchronous write: write takes one cycle
     // Write-byte-enable: select which of the four bytes to write
     logic [31:0] imem_dina, imem_doutb;
-    logic [13:0] imem_addra, imem_addrb;
+    logic [14:0] imem_addra, imem_addrb;
     logic [3:0] imem_wea;
     logic imem_ena;
     imem imem (
@@ -117,6 +123,7 @@ module cpu #(
         .data_in_ready(uart_tx_data_in_ready)
     );
 
+    /***************** CHECKPOINT 2 *****************/
     // On-chip Ethernet: the eth_* ports above. Memory-mapped I/O (addr[31:28] = 4'b1000):
     //   0x8000_0020  ETH_STATUS   R  {28'b0, eth_link_up, eth_tx_ready, eth_rx_last, eth_rx_valid}
     //   0x8000_0024  ETH_RX_DATA  R  {24'b0, eth_rx_data}; the load pops the byte (eth_rx_ready)
@@ -133,6 +140,9 @@ module cpu #(
     logic [31:0] tohost_csr = 0;
 
     // Illegal instruction / trap aggregation (stub: tie low until core reports faults)
+    // TODO: drive uart_rx_overflow from your UART's receive buffer
+    logic uart_rx_overflow;
+    assign uart_rx_overflow = 1'b0;
     assign errors[0] = uart_rx_overflow; // input buffer overflowed
     // Optional TODO: errors[1] is raised when PC is invalid (ie. not in IMEM or BIOS)
     assign errors[1] = 1'b0;

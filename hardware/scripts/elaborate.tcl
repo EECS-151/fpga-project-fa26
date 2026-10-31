@@ -11,7 +11,7 @@ if {[string trim ${CONSTRAINTS}] ne ""} {
 }
 
 # Only elaborate RTL (don't synthesize to netlist)
-synth_design -verilog_define SYNTHESIS -verilog_define ABS_TOP=${ABS_TOP} -top ${TOP} -part ${FPGA_PART} -include_dirs ${ABS_TOP}/src/riscv_core -rtl
+synth_design -verilog_define SYNTHESIS -verilog_define ABS_TOP=${ABS_TOP} -generic HAS_ACCEL=${HAS_ACCEL} -top ${TOP} -part ${FPGA_PART} -include_dirs ${ABS_TOP}/src/riscv_core -rtl
 
 # write_checkpoint doesn't work:
 # Vivado% write_checkpoint -force zu3top_post_elab.dcp

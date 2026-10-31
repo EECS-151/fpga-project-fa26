@@ -12,7 +12,6 @@ module uart_parse_tb();
 
   initial clk = 0;
   always #(CPU_CLOCK_PERIOD/2) clk = ~clk;
-  reg bp_enable = 1'b0;
 
   reg  serial_in;
   wire serial_out;

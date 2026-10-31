@@ -116,7 +116,8 @@ set_property IOB FALSE [get_cells -hierarchical -filter {NAME =~ *mii_phy_if_ins
 # set_property PACKAGE_PIN F11 [get_ports {JAB_tri_io[5]}]
 # set_property IOSTANDARD LVCMOS33 [get_ports JAB_tri_io*]
 
-# A 400 MHz counter in the Ethernet interface crosses into the CPU clock as a gray code:
-# bound the skew between its bits to one period of that clock.
+# A 400 MHz counter in the Ethernet interface crosses into its byte port's clock (the CPU's, or
+# with HAS_ACCEL the accelerator's) as a gray code: bound the skew between its bits to one period
+# of that counter.
 set_max_delay -datapath_only -from [get_cells -hier -filter {NAME =~ */seal/tb_gray_reg[*]}] \
     -to [get_cells -hier -filter {NAME =~ */seal/tb_sync0_reg[*]}] 2.500

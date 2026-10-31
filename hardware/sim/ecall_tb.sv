@@ -15,7 +15,6 @@ module ecall_tb;
 
   initial clk = 0;
   always #(CPU_CLOCK_PERIOD/2) clk = ~clk;
-  logic bp_enable = 1'b0;
 
   localparam logic [31:0] RESET_PC = 32'h1000_0100;
 
@@ -26,7 +25,6 @@ module ecall_tb;
     .clk(clk),
     .system_clk(clk),
     .rst(rst),
-    .bp_enable(bp_enable),
     .serial_in(1'b1),
     .serial_out(),
     .errors()

@@ -17,10 +17,27 @@ make isa-tests
 verdi -dbdir sim/isa/isa_tb.tb.daidir -ssf sim/isa/rv32ui-p-add.fsdb &
 ```
 
+### Accelerator Tests (Checkpoint 3)
+```bash
+# unit testbenches: ffs, book_side, quote_mgr (any latency; results are checked at valid/done)
+make sim/ffs_tb.fsdb
+make sim/book_side_tb.fsdb
+make sim/quote_mgr_tb.fsdb
+# the whole accelerator against the test vectors (sim/accel/vectors), every case
+make accel-core-tests
+# one case, with waveforms (in sim/accel/out)
+WAVES=1 CPU_PERIODS=10 sim/accel/run_accel_core.sh default_seed1
+# your CPU and the accelerator together, through the MMIO window (software/accel_mmio)
+make -C ../software/accel_mmio
+make sim/accel_mmio_tb.fsdb
+```
+
 - Clean simulation outputs: `make clean-sim`
 - Forcefully re-run a testbench: `make -B sim/cpu_tb.fsdb`
 
 ## CAD Flow
+- Checkpoint 3: set `HAS_ACCEL = 1'b1` in `src/zu3top.sv` to build with the accelerator. Its clock is
+  `ACCEL_CLOCK_MHZ`, next to it.
 - Lint RTL with verilator: `make lint`
 - Open Vivado GUI: `make vivado`
 - Elaborate and open circuit in GUI: `make elaborate`

@@ -17,6 +17,11 @@ SYNTH_RTL               := $(RTL)
 SYNTH_ETH_RTL           := $(ETH_RTL)
 endif
 CONSTRAINTS             += $(subst /cygdrive/c/,C:/,$(shell find $(ABS_TOP)/src -type f -name "*.xdc"))
+# Checkpoint 3: build with the accelerator? Read from zu3top's HAS_ACCEL parameter
+HAS_ACCEL               ?= $(shell grep -qE "parameter +bit +HAS_ACCEL *= *(1'b1|1) *(,|$$)" $(ABS_TOP)/src/zu3top.sv && echo 1 || echo 0)
+ifneq ($(HAS_ACCEL),1)
+CONSTRAINTS             := $(filter-out $(ABS_TOP)/src/accel/%,$(CONSTRAINTS))
+endif
 TOP                     ?= zu3top
 VCS                     := $(VCS_HOME)/bin/vcs -full64
 VCS_OPTS                := -notice -line +lint=all,noVCDE,noNS,noSVA-UA -sverilog -kdb -timescale=1ns/10ps -debug_access+all -ignore initializer_driver_checks \
@@ -109,13 +114,24 @@ sim/c_tests/%.fsdb: sim/c_tests/c_tests_tb.tb $(ABS_TOP)/../software/c_tests/%
 
 c-tests: $(C_TESTS_FSDB)
 
-build/target.tcl: $(SYNTH_RTL) $(SYNTH_ETH_RTL) $(CONSTRAINTS)
+# Checkpoint 3: the accelerator against the expected vectors (sim/accel/vectors) every case
+accel-core-tests:
+	sim/accel/run_accel_core.sh
+
+# Records HAS_ACCEL, so that changing it rebuilds
+build/has_accel_$(HAS_ACCEL):
+	mkdir -p build
+	rm -f build/has_accel_*
+	touch $@
+
+build/target.tcl: $(SYNTH_RTL) $(SYNTH_ETH_RTL) $(CONSTRAINTS) build/has_accel_$(HAS_ACCEL)
 	mkdir -p build
 	truncate -s 0 $@
 	echo "set ABS_TOP                        $(ABS_TOP)"    >> $@
 	echo "set TOP                            $(TOP)"    >> $@
 	echo "set FPGA_PART                      $(FPGA_PART)"  >> $@
 	echo "set SEALED                         $(SEALED)"  >> $@
+	echo "set HAS_ACCEL                      $(HAS_ACCEL)"  >> $@
 	echo "set_param general.maxThreads       4"    >> $@
 	echo "set_param general.maxBackupLogs    0"    >> $@
 	echo -n "set RTL { " >> $@
@@ -189,7 +205,7 @@ clean-sim:
 	sim/*.tb sim/*.daidir sim/csrc \
 	sim/ucli.key sim/*.fsdb sim/novas* \
 	sim/*.jou sim/*.log sim/*.out \
-	sim/isa sim/c_tests \
+	sim/isa sim/c_tests sim/accel/out \
 	novas.* verdiLog
 
 clean-build:
@@ -197,6 +213,6 @@ clean-build:
 
 clean: clean-sim clean-build
 
-.PHONY: setup elaborate synth impl program program-force release board-status vivado all lint compile_simlib screen verdi \
+.PHONY: setup elaborate synth impl program program-force release board-status vivado all lint compile_simlib screen verdi accel-core-tests \
         isa-tests c-tests clean clean-sim clean-build
 .PRECIOUS: sim/%.tb

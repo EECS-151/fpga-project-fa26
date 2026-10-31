@@ -13,3 +13,6 @@ ucli.key
 DVEfiles
 .idea
 test_results
+# the accelerator's test vectors are .txt files; its runner's scratch directory
+!sim/accel/vectors/*/*.txt
+sim/accel/out
