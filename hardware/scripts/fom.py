@@ -1,131 +1,140 @@
 #!/usr/bin/env python3
+"""Checkpoint 4 FOM
 
-version = '1.2'
+    FOM = 10^5 * sqrt(Fmax_CPU / (CPI * T_t2t * cost))
 
+  Fmax_CPU  MHz, the CPU clock (cpu_clk_int) from the post-route timing summary
+  CPI       geometric mean of the bdd, mmult, qsort and sha256 benchmarks' CPIs, run on the FPGA
+            (get_cpi.py)
+  T_t2t     ns, the median tick-to-trade the trading simulator reports for a round with your
+            board (its "FPGA tag latency" median); give it with --t2t
+  cost      the post-route utilization report, priced by get_cost.py
+
+Run from anywhere. the reports are found relative to this script. Program the board first
+(make program): the CPI run uses your leased board's UART.
+"""
+
+version = '2.0'
+
+import argparse
 import math
 import os
 import sys
 import time
-import argparse
 from pathlib import Path
 
-from get_cost import get_cost
+from get_cost import get_cost, unknown_message
 from get_fmax import get_fmax
-from run_coremark import run_zephyr_coremark
+from get_cpi import get_cpi
+from run_fpga import default_port, DEFAULT_TIMEOUT_S
 
-surpt = "build/synth/post_synth_utilization.rpt"
-strpt = "build/synth/post_synth_timing_summary.rpt"
-iurpt = "build/impl/post_place_utilization.rpt"
-itrpt = "build/impl/post_route_timing_summary.rpt"
+BUILD = Path(__file__).resolve().parent.parent / 'build'
+REPORTS = {   # (utilization, timing summary)
+    'impl': (BUILD / 'impl/post_route_utilization.rpt', BUILD / 'impl/post_route_timing_summary.rpt'),
+    'synth': (BUILD / 'synth/post_synth_utilization.rpt', BUILD / 'synth/post_synth_timing_summary.rpt'),
+}
 
-DEFAULT_HEX = Path(__file__).resolve().parent.parent.parent / "zephyr/zephyr/build/zephyr/zephyr.hex"
+
+def fom(fmax_mhz, cpi, t2t_ns, cost):
+  return 1e5 * math.sqrt(fmax_mhz / (cpi * t2t_ns * cost))
 
 
-def open_file(fname):
-  if os.path.isfile(fname):
-    print('Using {} (last modified: {})'.format(fname, time.ctime(os.path.getmtime(fname))))
-    return open(fname, 'r')
+def open_rpt(path):
+  print('Using {} (last modified: {})'.format(path, time.ctime(os.path.getmtime(path))))
+  return open(path)
+
+
+def main():
+  parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser.add_argument('--t2t', action='store', type=float, required=True,
+                      help='median tick-to-trade in ns, from the trading simulator')
+  parser.add_argument('-s', '--synth', action='store_true',
+                      help='estimate from the post-synthesis reports instead of the post-route ones')
+  parser.add_argument('-i', '--impl', action='store_true', help='use the post-route reports (the default)')
+  parser.add_argument('-u', '--urpt', action='store', help='utilization report (overrides -s/-i)')
+  parser.add_argument('-t', '--trpt', action='store', help='timing summary report (overrides -s/-i)')
+  parser.add_argument('-c', '--cost', action='store', type=int, help='override the cost')
+  parser.add_argument('-f', '--fmax', action='store', type=float, help='override the CPU Fmax, in MHz')
+  parser.add_argument('--cpi', action='store', type=float, help='override the CPI (skips the FPGA run)')
+  parser.add_argument('--port_name', action='store', default=None,
+                      help="serial port (default: your leased board's PMOD UART)")
+  parser.add_argument('--com_name', action='store', default='COM11')
+  parser.add_argument('--timeout', action='store', type=float, default=DEFAULT_TIMEOUT_S,
+                      help='seconds each benchmark may run on the FPGA (default: %(default)s)')
+  parser.add_argument('-o', '--output', action='store', default='fom.txt',
+                      help="results file (default: %(default)s; '' for none)")
+  args = parser.parse_args()
+  if args.synth and args.impl:
+    parser.error('give -s or -i, not both')
+
+  print('fom version ' + version)
+  urpt, trpt = REPORTS['synth' if args.synth else 'impl']
+  urpt = Path(args.urpt) if args.urpt else urpt
+  trpt = Path(args.trpt) if args.trpt else trpt
+
+  errors = []     # printed as they happen, and repeated in the results file
+
+  def error(msg):
+    print(msg)
+    errors.append(msg)
+
+  def finish(results=''):
+    if args.output:
+      Path(args.output).write_text(''.join(e + '\n' for e in errors) + results)
+      print('Results written to {}'.format(args.output))
+    sys.exit(0 if results else 1)
+
+  if args.cost is not None:
+    cost = args.cost
+  elif urpt.is_file():
+    with open_rpt(urpt) as f:
+      cost, unknown = get_cost(f)
+    for ele in unknown:
+      error(unknown_message(ele))
   else:
-    print(fname + ' not found')
-    return None
+    error('ERROR: {} not found: run make impl, or give the cost with -c'.format(urpt))
+    finish()
 
-def open_rpts(urpt, trpt, fcost, ffmax):
-  u = None
-  if fcost is None:
-    u = open_file(urpt)
-  t = None
-  if ffmax is None:
-    t = open_file(trpt)
-  return u, t
-
-parser = argparse.ArgumentParser(
-    description="FOM calculation program: by default, reads the newest set of reports for cost and fmax, runs CoreMark on the FPGA, and displays FOM. '-s' or '-i' forces use of reports in 'build/synth' or 'build/impl', respectively. You can manually specify reports with '-u' and '-t'. You can override cost, fmax, or coremarks with '-c', '-f', and '--coremarks', respectively.")
-
-parser.add_argument('-s', '--synth', action='store_true', help='use synthesis reports')
-parser.add_argument('-i', '--impl', action='store_true', help='use implementation reports')
-
-parser.add_argument('-u', '--urpt', action='store', help='resource utilization report')
-parser.add_argument('-t', '--trpt', action='store', help='timing summary report')
-
-parser.add_argument('--port_name', action='store', default='/dev/ttyUSB0')
-parser.add_argument('--com_name', action='store', default='COM11')
-parser.add_argument(
-    '--hex',
-    action='store',
-    default=str(DEFAULT_HEX),
-    help='Zephyr .hex image for CoreMark (default: %(default)s)',
-)
-
-parser.add_argument('-c', '--cost', action='store', type=int)
-parser.add_argument('-f', '--fmax', action='store', type=float, help='in MegaHertz, int or float')
-parser.add_argument(
-    '--coremarks',
-    action='store',
-    type=float,
-    help='override CoreMark score (skip FPGA run)',
-)
-
-args = parser.parse_args()
-
-if (args.urpt is None) != (args.trpt is None):
-  print('both urpt and trpt must be specified when one of them are specified')
-  exit()
-if args.synth and args.impl:
-  print('specify none or either of -s or -i')
-  exit()
-
-if not(args.urpt is None):
-  u, t = open_rpts(args.urpt, args.trpt, args.cost, args.fmax)
-elif args.synth:
-  u, t = open_rpts(surpt, strpt, args.cost, args.fmax)
-elif args.impl:
-  u, t = open_rpts(iurpt, itrpt, args.cost, args.fmax)
-elif os.path.isfile(surpt) and os.path.isfile(iurpt):
-  if os.path.getmtime(surpt) > os.path.getmtime(iurpt):
-    u, t = open_rpts(surpt, strpt, args.cost, args.fmax)
+  if args.fmax is not None:
+    fmax = args.fmax
+  elif trpt.is_file():
+    with open_rpt(trpt) as f:
+      fmax, wns = get_fmax(f)
+    if wns is not None and wns < 0:
+      error('ERROR: Negative slack. Timing violated. WNS(ns) = {}'.format(wns))
   else:
-    u, t = open_rpts(iurpt, itrpt, args.cost, args.fmax)
-elif os.path.isfile(surpt):
-  u, t = open_rpts(surpt, strpt, args.cost, args.fmax)
-elif os.path.isfile(iurpt):
-  u, t = open_rpts(iurpt, itrpt, args.cost, args.fmax)
-else:
-  u, t = None, None
+    error('ERROR: {} not found: run make impl, or give the CPU Fmax with -f'.format(trpt))
+    finish()
 
-if u is None and args.cost is None:
-  print('utilization report not found and cost not specified')
-  exit()
-elif args.cost is None:
-  cost = get_cost(u)
-else:
-  cost = args.cost
+  if args.cpi is not None:
+    cpi = args.cpi
+  else:
+    try:
+      cpi = get_cpi(args.port_name or default_port(), args.com_name, args.timeout)
+    except (FileNotFoundError, TimeoutError) as e:
+      error('ERROR: CPI run failed: {}'.format(e))
+      finish()
 
-if t is None and args.fmax is None:
-  print('timing report not found and fmax not specified')
-  exit()
-elif args.fmax is None:
-  fmax = get_fmax(t)
-else:
-  fmax = args.fmax
+  bad = [(n, v) for n, v in (('cost', cost), ('Fmax', fmax), ('CPI', cpi), ('T_t2t', args.t2t)) if not v > 0]
+  for name, value in bad:
+    error('ERROR: {} must be positive, got {}'.format(name, value))
+  if bad:
+    finish()
 
-if args.coremarks is not None:
-  coremarks = args.coremarks
-else:
-  result = run_zephyr_coremark(args.hex, args.port_name, args.com_name)
-  if result.get('error'):
-    print('CoreMark run failed')
-    sys.exit(1)
-  total_ticks = result['total_ticks']
-  iterations = result['iterations']
-  coremarks = iterations / (total_ticks / (fmax * 1e6))
+  results = (
+      '\n'
+      'Fmax (MHz): {}\n'
+      'CPI: {:.4f}\n'
+      'T_t2t (ns): {}\n'
+      'Cost: {}\n'
+      '\n'
+      'FOM: {:.2f}\n'
+  ).format(fmax, cpi, args.t2t, cost, fom(fmax, cpi, args.t2t, cost))
+  if args.synth and not (args.urpt or args.trpt):
+    results += '(estimated from the post-synthesis reports)\n'
+  print(results)
+  finish(results)
 
-coremarks_per_mhz = coremarks / fmax
-fom = coremarks / math.sqrt(cost) * 100.0
 
-print('')
-print('Fmax: ' + str(fmax))
-print('Coremarks: {:.4f}'.format(coremarks))
-print('Coremarks/MHz: {:.4f}'.format(coremarks_per_mhz))
-print('Cost: ' + str(cost))
-print('')
-print('FOM: {:.2f}'.format(fom))
+if __name__ == '__main__':
+  main()

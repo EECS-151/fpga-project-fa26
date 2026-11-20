@@ -1,79 +1,74 @@
 #!/usr/bin/env python3
-
-from run_fpga import run_fpga
-from subprocess import Popen, PIPE
-import numpy as np
-import os
 import argparse
+import math
+import re
+import subprocess
+from pathlib import Path
 
-benchmark_path = '../software/benchmark'
+from run_fpga import run_fpga, default_port, DEFAULT_TIMEOUT_S
+
+HARDWARE = Path(__file__).resolve().parent.parent
+SOFTWARE = HARDWARE.parent / 'software'
+BENCHMARKS = ('bdd', 'mmult', 'qsort', 'sha256')
+
+
+def _geomean(xs):
+  return math.exp(sum(math.log(x) for x in xs) / len(xs))
+
+
+def _report(cycles, insts):
+  print('Cycle Counts: {}'.format(cycles))
+  print('Instruction Counts: {}'.format(insts))
+  cpis = {b: cycles[b] / insts[b] for b in BENCHMARKS}
+  for b in BENCHMARKS:
+    print('{} CPI: {:.4f}'.format(b, cpis[b]))
+  cpi = _geomean(list(cpis.values()))
+  print('CPI (geomean): {:.4f}'.format(cpi))
+  return cpi
+
+
+def get_cpi(port, com, timeout_s=DEFAULT_TIMEOUT_S):
+  """CPI on the FPGA. Raises FileNotFoundError if a benchmark isn't built, TimeoutError if one
+  doesn't finish."""
+  print('Running on FPGA ({})...'.format(port))
+  cycles, insts = {}, {}
+  for b in BENCHMARKS:
+    hex_file = SOFTWARE / 'benchmark' / b / (b + '.hex')
+    if not hex_file.is_file():
+      raise FileNotFoundError('{} not found: build it with make -C {}'.format(hex_file, SOFTWARE / 'benchmark'))
+    cycles[b], insts[b] = run_fpga(str(hex_file), port, com, timeout_s)
+  print('...FPGA run complete')
+  return _report(cycles, insts)
+
 
 def get_cpi_sim():
+  """CPI estimate from the small benchmarks in simulation."""
+  subprocess.run(['make', '-C', str(SOFTWARE / 'small')], check=True)
   print('Running simulation...')
-  p = Popen('make small-tests -B', shell=True, stdout=PIPE, stderr=PIPE)
-  stdout, stderr = p.communicate()
-  lines = stdout.decode('ascii', errors='ignore').splitlines()
-
-  # Hardcoding the fact that small-tests only runs three tests,
-  # and that the third one is fpmmult
-
-  cyc_cnts = []
-  inst_cnts = []
-  for line in lines[2:]:
-    line = line.strip()
-    print(line)
-    if line.startswith('Cycle Count:'):
-      cyc_cnts.append(int(line.split()[2], 16))
-    elif line.startswith('Instruction Count:'):
-      inst_cnts.append(int(line.split()[2], 16))
+  cycles, insts = {}, {}
+  for b in BENCHMARKS:
+    tb = b + '_small_tb'
+    fsdb = HARDWARE / 'sim' / (tb + '.fsdb')
+    if fsdb.exists():
+      fsdb.unlink()                 # rerun even if the RTL hasn't changed
+    p = subprocess.run(['make', 'sim/{}.fsdb'.format(tb)], cwd=HARDWARE, capture_output=True, text=True, errors='replace')
+    cyc = re.search(r'Cycle Count:\s*([0-9a-fA-F]+)', p.stdout)
+    inst = re.search(r'Instruction Count:\s*([0-9a-fA-F]+)', p.stdout)
+    if p.returncode or not cyc or not inst:
+      raise RuntimeError('{} printed no cycle and instruction counts: see {}'.format(tb, HARDWARE / 'sim' / (tb + '.log')))
+    cycles[b], insts[b] = int(cyc.group(1), 16), int(inst.group(1), 16)
   print('...simulation complete')
-  print('Cycle Counts: {}'.format(cyc_cnts))
-  print('Instruction Counts: {}'.format(inst_cnts))
-  if len(cyc_cnts) != len(inst_cnts) or len(cyc_cnts) != 3:
-    print('Error: got {} cycle counts and {} instruction counts, expecting 3'.format(len(cyc_cnts), len(inst_cnts)))
-    return None
-  integer_cpi = ((cyc_cnts[0] / inst_cnts[0]) * (cyc_cnts[1] / inst_cnts[1])) ** 0.5
-  print('Estimated Integer CPI (geomean): {:.2f}'.format(integer_cpi))
-  fp_cpi = cyc_cnts[2] / inst_cnts[2]
-  print('Estimated Floating Point CPI: {:.2f}'.format(fp_cpi))
-  return (integer_cpi, fp_cpi)
-
-def get_cpi(port, com):
-
-  print('Running on FPGA...')
-  benchmarks = ["bdd", "mmult"]
-  cyc_cnts = []
-  inst_cnts = []
-  for benchmark in benchmarks:
-    cycle_count, inst_count = run_fpga(os.path.join(benchmark_path, benchmark, benchmark + '.hex'), port, com)
-    cyc_cnts.append(cycle_count)
-    inst_cnts.append(inst_count)
-  print('...FPGA run complete')
-  print('Cycle Counts: {}'.format(cyc_cnts))
-  print('Instruction Counts: {}'.format(inst_cnts))
-  cyc_cnts = np.array(cyc_cnts)
-  inst_cnts = np.array(inst_cnts)
-  cpis = cyc_cnts / inst_cnts
-  np.set_printoptions(precision=2)
-  print('CPIs: ' + np.array2string(cpis, separator=', '))
-  integer_cpi = cpis.prod()**(1.0/len(cpis))
-  print('Integer CPI (geomean): {:.2f}'.format(integer_cpi))
-
-  cycle_count, inst_count = run_fpga("../software/fpmmult/fpmmult.hex", port, com)
-
-  fp_cpi = cycle_count / inst_count
-  print('FP CPI (geomean): {:.2f}'.format(fp_cpi))
-
-  return (integer_cpi, fp_cpi)
+  return _report(cycles, insts)
 
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
-  parser.add_argument('-r', '--run', action="store_true")
-  parser.add_argument('--port_name', action="store", type=str, default='/dev/ttyUSB0')
+  parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser.add_argument('-r', '--run', action="store_true", help='run on the FPGA instead of in simulation')
+  parser.add_argument('--port_name', action="store", type=str, default=None,
+                      help="serial port (default: your leased board's PMOD UART)")
   parser.add_argument('--com_name', action="store", type=str, default='COM11')
   args = parser.parse_args()
   if args.run:
-    get_cpi(args.port_name, args.com_name)
+    get_cpi(args.port_name or default_port(), args.com_name)
   else:
     get_cpi_sim()

@@ -1,43 +1,29 @@
-import shutil
 import os
 import sys
-import re
 
-error_map = ["", "Invalid component synthesized. Please contact TA.", "Timing violation", "CPI tests are timing out"]
-
-def output_test_results(base, verbose=False):
-    test_results = {}
-    with open(f"{base}/run_all_sims_result.txt") as f:
-        lines = f.readlines()
-        i = 0
-        while i < len(lines)-1:
-            line = lines[i]
-            # Check if line matches "Running make [NAME]:"
-            match = re.search(r"Running make (\S+): (\S+)", line)
-            if match:
-                test_name = match.group(1)
-                # Look ahead for Passed or Failed in the following lines
-                test_results[test_name] = match.group(2) == "Passed"
-            if verbose:
-                print(line, end='')
-            i += 1
-        return test_results, lines[-1] == "All tests passed!"
+# Indexed by the error code output_fom_results returns
+error_map = ["", "Invalid component synthesized. Please contact TA.", "Timing violation", "CPI tests are timing out",
+             "FOM was not found, one of the previous steps is failing"]
 
 def output_fom_results(fom_file, verbose=False):
-    errors = False
+    """Returns (the values in scripts/fom.py's results file, an error code: an index into error_map, 0 if none)."""
+    errors = 0
     lines = {
-        "fmax": "Fmax: ",
-        "integer_cpi": "Integer CPI: ",
-        "fp_cpi": "Floating Point CPI: ",
+        "fmax": "Fmax (MHz): ",
+        "cpi": "CPI: ",
+        "t2t": "T_t2t (ns): ",
         "cost": "Cost: ",
         "fom": "FOM: "
     }
     data = dict()
+    if not os.path.isfile(fom_file):
+        print(f"ERROR: {fom_file} not found: run scripts/fom.py")
+        return (data, 4)
     with open(fom_file) as f:
         for line in f:
             if "Please report to TA" in line:
                 errors = 1
-                print("ERROR:", line[:-1])
+                print("ERROR:", line.rstrip())
             if "ERROR: Negative slack. Timing violated" in line:
                 errors = 2
                 if verbose:
@@ -45,27 +31,22 @@ def output_fom_results(fom_file, verbose=False):
             if "Timeout" in line:
                 if verbose:
                     print("ERROR: CPI tests timed out")
-                errors = 3 
+                errors = 3
             for k in lines:
                 if line.startswith(lines[k]):
                     data[k] = float(line[len(lines[k]):])
     if "fom" not in data:
         if verbose:
             print("ERROR: FOM was not found, one of the previous steps is failing")
-        errors = True
-    else:
-        if verbose:
-            for k in data:
-                print(f"{lines[k]}{data[k]}")
+        errors = errors or 4
+    elif verbose:
+        for k in data:
+            print(f"{lines[k]}{data[k]}")
     return (data, errors)
-    
+
 
 if __name__ == "__main__":
-
-    _, errors = output_test_results("./submission", verbose=True)
-
-    errors = errors or output_fom_results("./submission/fom.txt", verbose=True)[1]
-
-    if errors:
+    # The autograder takes the results file scripts/fom.py writes (fom.txt by default)
+    fom_file = sys.argv[1] if len(sys.argv) > 1 else "fom.txt"
+    if output_fom_results(fom_file, verbose=True)[1]:
         print("WARNING: This submission will NOT pass the Autograder")
-

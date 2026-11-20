@@ -3,37 +3,47 @@
 import os
 import argparse
 
-def get_fmax(f):
-  for line in f:
-    if line.startswith('| Design Timing Summary'):
-      next(f)
-      line = next(f).strip()
-      while not(line.startswith('WNS')):
-        line = next(f).strip()
-      next(f)
-      line = next(f)
-      x = line.split()
-      wns = float(x[0])
-      if wns < 0:
-        print(f"ERROR: Negative slack. Timing violated. WNS(ns) = {wns}")
+CPU_CLOCK = 'cpu_clk_int'
 
-    if line.startswith('| Clock Summary'):
-      next(f)
-      line = next(f).strip()
-      while not(line.startswith('cpu_clk_int')):
-        line = next(f).strip()
-      x = line.split()
-      return float(x[-1])
+
+def get_fmax(f, clock=CPU_CLOCK):
+  """Returns (frequency of `clock` in MHz, design WNS in ns or None if the report has none)."""
+  lines = f.read().splitlines()
+  fmax = None
+  wns = None
+  for i, line in enumerate(lines):
+    if line.startswith('| Design Timing Summary') and wns is None:
+      # the column header row, a row of dashes, then the values
+      for j in range(i + 1, len(lines) - 2):
+        if lines[j].strip().startswith('WNS'):
+          x = lines[j + 2].split()
+          if x:
+            wns = float(x[0])
+          break
+    elif line.startswith('| Clock Summary') and fmax is None:
+      for l in lines[i + 1:]:
+        x = l.split()
+        if x and x[0] == clock:
+          fmax = float(x[-1])
+          break
+  if fmax is None:
+    raise ValueError(f"clock '{clock}' is not in the report's Clock Summary")
+  return fmax, wns
+
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
+  parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('rpt', action='store', help='timing summary report')
+  parser.add_argument('--clock', action='store', default=CPU_CLOCK, help='clock name (default: %(default)s)')
 
   args = parser.parse_args()
-  if os.path.isfile(args.rpt):
-    f = open(args.rpt, 'r')
-  else:
+  if not os.path.isfile(args.rpt):
     print(args.rpt + ' not found')
-    exit()
+    exit(1)
 
-  print('Fmax: ' + str(get_fmax(f)))
+  with open(args.rpt) as f:
+    fmax, wns = get_fmax(f, args.clock)
+  print('Fmax (MHz): ' + str(fmax))
+  print('WNS (ns): ' + str(wns))
+  if wns is not None and wns < 0:
+    print(f'ERROR: Negative slack. Timing violated. WNS(ns) = {wns}')

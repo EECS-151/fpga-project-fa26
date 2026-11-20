@@ -32,6 +32,7 @@ make -C ../software/accel_mmio
 make sim/accel_mmio_tb.fsdb
 ```
 
+- Run every CPU testbench (builds the software first): `python3 scripts/run_all_sims.py` (`-c` to keep going after a failure)
 - Clean simulation outputs: `make clean-sim`
 - Forcefully re-run a testbench: `make -B sim/cpu_tb.fsdb`
 
@@ -54,3 +55,22 @@ make sim/accel_mmio_tb.fsdb
 ## Runtime
 - Run screen to open UART connection: `make screen`
     - To exit screen: Ctrl-A Shift-K (then press 'y')
+
+## Figure of Merit (Checkpoint 4)
+FOM = 10^5 · sqrt(F<sub>max,CPU</sub> / (CPI × T<sub>t2t</sub> × cost))
+
+- F<sub>max,CPU</sub> (MHz): the CPU clock, from `build/impl/post_route_timing_summary.rpt`. Timing must be met.
+- CPI: the geometric mean of the `bdd`, `mmult`, `qsort` and `sha256` benchmarks' CPIs, run on your board.
+- T<sub>t2t</sub> (ns): the median tick-to-trade the trading simulator shows for a round with your board
+  (its FPGA tag latency median).
+- cost: `build/impl/post_route_utilization.rpt`, priced by `scripts/get_cost.py`.
+
+```bash
+make impl && make program               # the CPI runs on the board you hold
+make -C ../software/benchmark           # build the benchmarks
+python3 scripts/fom.py --t2t <median tick-to-trade in ns>
+```
+- Results are also written to `fom.txt` (`-o` to change).
+- Override any input instead of measuring it: `-c COST`, `-f FMAX_MHZ`, `--cpi CPI`.
+- Quick estimates: `python3 scripts/fom.py -s ...` uses the post-synthesis reports;
+  `python3 scripts/get_cpi.py` estimates CPI in simulation from the small benchmarks.

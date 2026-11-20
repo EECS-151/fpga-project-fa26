@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-version = '1.2'
+version = '1.3'
 
 import os
 import argparse
@@ -17,6 +17,7 @@ elements = {'LUT6': 1713,
             'RAMB36E2': 0,
             'RAMS32': 857,
             'RAMS64E': 1713,
+            'RAMD64E': 1713,
             'FDSE': 107,
             'LUT1': 429,
             'MUXF7': 7,
@@ -42,23 +43,28 @@ elements = {'LUT6': 1713,
             }
 
 def get_cost(f):
+  """Returns (cost, primitives the price table doesn't know) from a utilization report."""
   print('get_cost version ' + version)
   cost = 0
-  for line in f:
+  unknown = []
+  lines = iter(f.read().splitlines())
+  for line in lines:
     if "Ref Name" in line and "Used" in line and "Functional Category" in line:
-      next(f)
-      line = next(f)
-      while not(line.startswith('+')):
+      next(lines)                       # the +---+ under the header
+      for line in lines:
+        if line.startswith('+'):
+          break
         x = line.split('|')
         ele = x[1].strip()
         cnt = int(x[2].strip())
         if ele in elements:
-          cst = cnt * elements[ele]
-          cost += cst
+          cost += cnt * elements[ele]
         else:
-          print(ele + ' is not a known element! Please report to TA.')
-        line = next(f)
-  return cost
+          unknown.append(ele)
+  return cost, unknown
+
+def unknown_message(ele):
+  return ele + ' is not a known element! Please report to TA.'
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
@@ -66,10 +72,12 @@ if __name__ == '__main__':
   parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + version)
 
   args = parser.parse_args()
-  if os.path.isfile(args.rpt):
-    f = open(args.rpt, 'r')
-  else:
+  if not os.path.isfile(args.rpt):
     print(args.rpt + ' not found')
-    exit()
+    exit(1)
 
-  print('Cost: ' + str(get_cost(f)))
+  with open(args.rpt) as f:
+    cost, unknown = get_cost(f)
+  for ele in unknown:
+    print(unknown_message(ele))
+  print('Cost: ' + str(cost))

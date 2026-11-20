@@ -13,11 +13,12 @@ source ${ABS_TOP}/src/eth/apply_eth_mac_cdc_constraints.tcl
 opt_design
 place_design
 write_checkpoint -force ${TOP}_placed.dcp
-report_utilization -file post_place_utilization.rpt
 phys_opt_design
 route_design
 
 write_checkpoint -force ${TOP}_routed.dcp
+# The FOM's cost (scripts/fom.py) is priced from this report
+report_utilization -file post_route_utilization.rpt
 write_verilog -force post_route.v
 write_xdc -force post_route.xdc
 report_drc -file post_route_drc.rpt

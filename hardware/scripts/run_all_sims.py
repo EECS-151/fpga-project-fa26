@@ -1,133 +1,140 @@
 #!/usr/bin/env python3
+"""Run the CPU's RTL testbenches and check their results.
 
-from subprocess import run, CompletedProcess
-from os import remove, makedirs, path
-from shutil import rmtree
-from typing import Callable
+Builds the software they run first. Prints one "Running make <target>: Passed|Failed" line per
+testbench, and ends with "All tests passed!" only if every one passed (scripts/pre_autograder.py
+reads this output). Each testbench's make output goes to test_results/. Runs from any directory.
+"""
+
 import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 
-RESULT_DIR = "test_results"
+HARDWARE = Path(__file__).resolve().parent.parent
+SOFTWARE = HARDWARE.parent / 'software'
+SIM = HARDWARE / 'sim'
+RESULT_DIR = HARDWARE / 'test_results'
+ISA_SOURCES = SOFTWARE / 'riscv-isa-tests/riscv-tests/isa/rv32ui'
+ISA_EXEMPT = ('fence_i', 'ma_data')     # ISA tests the CPU need not pass
 
 
-def run_bench(
-    name: str, cleanup: Callable[[], None], success_cond: Callable[[str], bool]
-) -> None:
-    """Runs a particular testbench
+def isa_tests():
+    return sorted(p.stem for p in ISA_SOURCES.glob('*.S') if p.stem not in ISA_EXEMPT)
 
-    'name': used in the command `make {name}`
-    'cleanup': function to delete testbench output of the previous run
-    'success_cond': takes in the stdout of running a testbench
-                    returns whether the run was successful
-    """
-    print(f"Running make {name}: ", end="")
+
+def c_tests():
+    return sorted(p.stem for p in (SOFTWARE / 'c_tests').glob('*/*.c'))
+
+
+def build_software():
+    """Builds every program the testbenches load. Returns what went wrong (empty if nothing)."""
+    if not any(ISA_SOURCES.glob('*.S')):
+        return ['the riscv-tests submodule is not checked out: run git submodule update --init']
+    dirs = [SOFTWARE / d for d in ('asm', 'echo', 'uart_parse', 'bios')]
+    dirs += sorted(p.parent for p in (SOFTWARE / 'c_tests').glob('*/Makefile'))
+    dirs += [SOFTWARE / 'riscv-isa-tests']
+    for d in dirs:
+        proc = subprocess.run(['make', '-C', str(d)], capture_output=True, universal_newlines=True, errors='replace')
+        if proc.returncode:
+            return ['make -C {} failed:'.format(d), proc.stdout + proc.stderr]
+    return []
+
+
+def missing_passes(log_dir, tests, pass_string):
+    """The tests whose log doesn't report a pass (a missing log counts: a test that never ran
+    hasn't passed)."""
+    problems = []
+    for t in tests:
+        log = log_dir / (t + '.log')
+        if not log.is_file():
+            problems.append('{}: did not run'.format(t))
+        elif pass_string not in log.read_text(errors='replace'):
+            problems.append('{}: did not pass (see {})'.format(t, log))
+    return problems
+
+
+def single_tb(name, pass_string):
+    """A testbench run with make sim/<name>.fsdb that passes if its output has pass_string."""
+    def cleanup():
+        for ext in ('tb', 'fsdb', 'log'):
+            p = SIM / '{}.{}'.format(name, ext)
+            if p.exists():
+                p.unlink()
+
+    def problems(stdout):
+        return [] if pass_string in stdout else ['"{}" not in the output'.format(pass_string)]
+
+    return 'sim/{}.fsdb'.format(name), cleanup, problems
+
+
+TESTBENCHES = [
+    single_tb('cpu_tb', 'All tests passed!'),
+    single_tb('asm_tb', 'ALL ASSEMBLY TESTS PASSED!'),
+    ('isa-tests', lambda: shutil.rmtree(str(SIM / 'isa'), ignore_errors=True),
+     lambda _: missing_passes(SIM / 'isa', isa_tests(), '[passed]')),
+    ('c-tests', lambda: shutil.rmtree(str(SIM / 'c_tests'), ignore_errors=True),
+     lambda _: missing_passes(SIM / 'c_tests', c_tests(), 'CSR test PASSED!')),
+    single_tb('echo_tb', 'Test passed!'),
+    single_tb('uart_parse_tb', 'CSR test PASSED! Strings matched.'),
+    single_tb('bios_tb', 'BIOS testbench done! Num failed tests:          0'),
+]
+
+
+def run_bench(target, cleanup, problems_of, continue_on_error):
+    """Runs make <target> in hardware/ and checks it. Returns whether it passed."""
+    print('Running make {}: '.format(target), end='', flush=True)
     cleanup()
-    proc = run(["make", name], capture_output=True)
-    stdout = proc.stdout.decode("utf-8")
-    stderr = proc.stderr.decode("utf-8")
-    with open(path.join(RESULT_DIR, f'{name.split("/")[-1]}.out'), "w") as fout:
-        fout.write(stdout)
-    with open(path.join(RESULT_DIR, f'{name.split("/")[-1]}.err'), "w") as ferr:
-        ferr.write(stderr)
-    if not success_cond(stdout):
-        print(f"Failed")
-        print("stdout:")
-        print(stdout)
-        print("stderr:")
-        print(stderr)
-        print(f"See {RESULT_DIR} for logs")
-        exit(1)
+    proc = subprocess.run(['make', target], cwd=str(HARDWARE), capture_output=True,
+                          universal_newlines=True, errors='replace')
+    name = target.split('/')[-1]
+    (RESULT_DIR / (name + '.out')).write_text(proc.stdout)
+    (RESULT_DIR / (name + '.err')).write_text(proc.stderr)
+    if proc.returncode:
+        problems = ['make exited with status {}'.format(proc.returncode)]
     else:
-        print("Passed")
-
-
-def cleanup_isa_tests() -> None:
-    rmtree("sim/isa", ignore_errors=True)
-
-
-def cleanup_c_tests() -> None:
-    rmtree("sim/c_tests", ignore_errors=True)
-
-
-def get_grep_output(proc: CompletedProcess) -> str:
-    stdout = proc.stdout.decode("utf-8").strip()
-    return stdout.split("\n")
-
-
-def isa_test_success_cond(_: str) -> bool:
-    proc_failed = run(
-        'grep -r -i "failed" sim/isa/*.log', shell=True, capture_output=True
-    )
-    proc_timout = run(
-        'grep -r -i "timeout" sim/isa/*.log', shell=True, capture_output=True
-    )
-    tests_failed = get_grep_output(proc_failed) + get_grep_output(proc_timout)
-    filtered_tests = list(
-        filter(lambda l: ("fence_i" not in l and "ma_data" not in l) and l != "", tests_failed)
-    )
-    if filtered_tests:
-        return False
-    return True
-
-
-def c_test_success_cond(_: str) -> bool:
-    proc_failed = run(
-        'grep -r -i "failed" sim/c_tests/*.log', shell=True, capture_output=True
-    )
-    proc_timout = run(
-        'grep -r -i "timeout" sim/c_tests/*.log', shell=True, capture_output=True
-    )
-    tests_failed = get_grep_output(proc_failed) + get_grep_output(proc_timout)
-    filtered_tests = list(filter(lambda l: l != "", tests_failed))
-    if filtered_tests:
-        return False
-    return True
-
-
-def silent_remove_factory(testbench: str) -> Callable[[], None]:
-    def foo():
-        try:
-            remove(f"sim/{testbench}.tb")
-            remove(f"sim/{testbench}.fsdb")
-            remove(f"sim/{testbench}.log")
-        except OSError:
-            pass
-
-    return foo
+        problems = problems_of(proc.stdout)
+    if not problems:
+        print('Passed')
+        return True
+    print('Failed')
+    for p in problems:
+        print('  ' + p)
+    if not continue_on_error:
+        print('stdout:')
+        print(proc.stdout)
+        print('stderr:')
+        print(proc.stderr)
+        print('See {} for logs'.format(RESULT_DIR))
+        sys.exit(1)
+    return False
 
 
 def main():
-    makedirs(RESULT_DIR, exist_ok=True)
-    parser = argparse.ArgumentParser(description="Run all RTL simulations and perform checks")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('-c', '--continue-on-error', action='store_true',
+                        help='run every testbench even after one fails')
     args = parser.parse_args()
-    run_bench(
-        "sim/cpu_tb.fsdb",
-        silent_remove_factory("cpu_tb"),
-        lambda stdout: "All tests passed!" in stdout,
-    )
-    run_bench(
-        "sim/asm_tb.fsdb",
-        silent_remove_factory("asm_tb"),
-        lambda stdout: "ALL ASSEMBLY TESTS PASSED!" in stdout,
-    )
-    run_bench("isa-tests", cleanup_isa_tests, isa_test_success_cond)
-    run_bench("c-tests", cleanup_c_tests, c_test_success_cond)
-    run_bench(
-        "sim/echo_tb.fsdb",
-        silent_remove_factory("echo_tb"),
-        lambda stdout: "Test passed!" in stdout,
-    )
-    run_bench(
-        "sim/uart_parse_tb.fsdb",
-        silent_remove_factory("uart_parse_tb"),
-        lambda stdout: "CSR test PASSED! Strings matched." in stdout,
-    )
-    run_bench(
-        "sim/bios_tb.fsdb",
-        silent_remove_factory("bios_tb"),
-        lambda stdout: "BIOS testbench done! Num failed tests:          0" in stdout,
-    )
-    print("All tests passed!")
+    RESULT_DIR.mkdir(exist_ok=True)
+
+    print('Building software: ', end='', flush=True)
+    problems = build_software()
+    if problems:
+        print('Failed')
+        for p in problems:
+            print('  ' + p)
+        print('Some tests failed')
+        sys.exit(1)
+    print('Passed')
+
+    passed = [run_bench(*tb, args.continue_on_error) for tb in TESTBENCHES]
+    if all(passed):
+        print('All tests passed!')
+    else:
+        print('Some tests failed')
+        sys.exit(1)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
